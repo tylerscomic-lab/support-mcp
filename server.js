@@ -1,5 +1,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
+import http from 'http';
 import { z } from 'zod';
 import Groq from 'groq-sdk';
 
@@ -166,5 +168,20 @@ Provide:
   return { content: [{ type: 'text', text }] };
 });
 
-const transport = new StdioServerTransport();
-await server.connect(transport);
+const PORT = process.env.PORT;
+if (PORT) {
+  const httpServer = http.createServer(async (req, res) => {
+    if (req.url === '/health') { res.writeHead(200); res.end('ok'); return; }
+    if (req.url === '/' || req.url?.startsWith('/mcp')) {
+      const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
+      res.on('close', () => transport.close());
+      await server.connect(transport);
+      await transport.handleRequest(req, res); return;
+    }
+    res.writeHead(404); res.end();
+  });
+  httpServer.listen(Number(PORT), () => console.log('Listening on port ' + PORT));
+} else {
+  const transport = new StdioServerTransport();
+  await server.connect(transport);
+}
