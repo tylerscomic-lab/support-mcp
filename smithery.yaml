@@ -1,0 +1,14 @@
+startCommand:
+  type: stdio
+  configSchema:
+    type: object
+    required:
+      - groqApiKey
+    properties:
+      groqApiKey:
+        type: string
+        description: Your Groq API key (free at console.groq.com)
+  commandFunction: |-
+    (config) => ({ command: 'node', args: ['server.js'], env: { GROQ_API_KEY: config.groqApiKey } })
+  exampleConfig:
+    groqApiKey: gsk_xxxxxxxxxxxxxxxxxxxx
