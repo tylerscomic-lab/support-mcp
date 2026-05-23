@@ -2,6 +2,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import http from 'http';
+import { randomUUID } from 'crypto';
 import { z } from 'zod';
 import Groq from 'groq-sdk';
 
@@ -170,15 +171,29 @@ Provide:
 
 const PORT = process.env.PORT;
 if (PORT) {
+  const sessions = new Map();
   const httpServer = http.createServer(async (req, res) => {
     if (req.url === '/health') { res.writeHead(200); res.end('ok'); return; }
-    if (req.url === '/' || req.url?.startsWith('/mcp')) {
-      const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
-      res.on('close', () => transport.close());
+    if (req.url !== '/' && !req.url?.startsWith('/mcp')) { res.writeHead(404); res.end(); return; }
+
+    const sessionId = req.headers['mcp-session-id'];
+    let transport;
+
+    if (sessionId && sessions.has(sessionId)) {
+      transport = sessions.get(sessionId);
+    } else {
+      transport = new StreamableHTTPServerTransport({
+        sessionIdGenerator: () => randomUUID(),
+        onsessioninitialized: (id) => sessions.set(id, transport),
+      });
+      res.on('close', () => {
+        if (transport.sessionId) sessions.delete(transport.sessionId);
+        transport.close();
+      });
       await server.connect(transport);
-      await transport.handleRequest(req, res); return;
     }
-    res.writeHead(404); res.end();
+
+    await transport.handleRequest(req, res);
   });
   httpServer.listen(Number(PORT), () => console.log('Listening on port ' + PORT));
 } else {
